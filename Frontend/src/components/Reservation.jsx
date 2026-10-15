@@ -4,6 +4,7 @@ import axios from "axios";
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
+import { BACKEND_URL } from "../config";
 
 const Reservation = () => {
   const [firstName, setFirstName] = useState("");
@@ -20,7 +21,7 @@ const Reservation = () => {
     e.preventDefault();
     try {
       const { data } = await axios.post(
-        "http://localhost:3000/api/v1/reservation/send",
+        `${BACKEND_URL}/api/v1/reservation/send`,
         { firstName, lastName, email, phone, date, time, guests, specialMessage },
         {
           headers: { "Content-Type": "application/json" },

@@ -2,8 +2,9 @@ import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
+import { BACKEND_URL } from "../config";
 
-const API = "http://localhost:3000/api/v1/admin";
+const API = `${BACKEND_URL}/api/v1/admin`;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const authHeaders = () => ({
