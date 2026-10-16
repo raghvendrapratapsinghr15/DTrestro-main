@@ -2481,3 +2481,152 @@ footer {
   justify-content: center;
   min-height: 200px;
 }
+
+/* ── Security Notice on Login ───────────────────────────────── */
+.admin-login-security-notice {
+  margin-top: 22px;
+  padding: 10px 14px;
+  background: rgba(212, 168, 67, 0.08);
+  border: 1px solid rgba(212, 168, 67, 0.2);
+  border-radius: 8px;
+  font-size: 0.78rem;
+  color: var(--brand-gold);
+  text-align: center;
+  line-height: 1.4;
+}
+
+/* ── Change Credentials View ────────────────────────────────── */
+.adm-credentials-view {
+  padding: 28px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: 680px;
+}
+
+.adm-cred-card {
+  padding: 0;
+}
+
+.adm-card-sub {
+  font-size: 0.82rem;
+  color: var(--brand-muted);
+  margin-top: 4px;
+}
+
+.adm-current-id-badge {
+  background: rgba(212, 168, 67, 0.1);
+  border-bottom: 1px solid #242424;
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.9rem;
+  color: var(--brand-cream);
+}
+
+.adm-current-id-badge strong {
+  color: var(--brand-gold);
+  letter-spacing: 0.02em;
+}
+
+.adm-cred-form {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.adm-form-divider {
+  display: flex;
+  align-items: center;
+  margin: 10px 0;
+  text-align: center;
+}
+
+.adm-form-divider::before,
+.adm-form-divider::after {
+  content: "";
+  flex: 1;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.adm-form-divider span {
+  padding: 0 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--brand-muted);
+}
+
+.adm-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.adm-form-group label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--brand-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.adm-form-group input {
+  background: #242424;
+  border: 1px solid #333;
+  border-radius: 10px;
+  padding: 12px 16px;
+  color: var(--brand-cream);
+  font-size: 0.95rem;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.adm-form-group input:focus {
+  border-color: var(--brand-gold);
+  box-shadow: 0 0 0 3px rgba(212, 168, 67, 0.15);
+}
+
+.adm-form-row {
+  display: flex;
+  gap: 16px;
+}
+
+@media (max-width: 600px) {
+  .adm-form-row {
+    flex-direction: column;
+  }
+}
+
+.adm-cred-btn {
+  background: linear-gradient(135deg, var(--brand-gold), var(--brand-gold-light));
+  color: #0f0f0f;
+  border: none;
+  border-radius: 10px;
+  padding: 14px 24px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  margin-top: 8px;
+  transition: opacity 0.2s, transform 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-start;
+}
+
+.adm-cred-btn:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.adm-cred-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+

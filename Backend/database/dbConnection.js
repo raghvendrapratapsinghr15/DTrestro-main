@@ -8,12 +8,15 @@ try {
   // ignore if restricted
 }
 
+import { initAdminAccount } from "../scripts/initAdmin.js";
+
 const dbConnection = async () => {
   try {
     await mongoose.connect(process.env.MONGO_URL, {
       dbName: "dtrestro",
     });
     console.log("Connected to database successfully!");
+    await initAdminAccount();
   } catch (error) {
     console.log("Database connection error:", error);
   }

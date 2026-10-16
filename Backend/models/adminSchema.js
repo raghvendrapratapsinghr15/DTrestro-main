@@ -4,18 +4,24 @@ import jwt from "jsonwebtoken";
 
 const adminSchema = new mongoose.Schema(
   {
+    adminId: {
+      type: String,
+      required: [true, "Admin ID is required"],
+      unique: true,
+      trim: true,
+    },
     name: {
       type: String,
-      required: true,
+      default: "Admin",
+      trim: true,
     },
     email: {
       type: String,
-      required: true,
-      unique: true,
+      trim: true,
     },
     password: {
       type: String,
-      required: true,
+      required: [true, "Password is required"],
       minLength: [6, "Password must be at least 6 characters"],
       select: false,
     },
@@ -36,9 +42,13 @@ adminSchema.methods.comparePassword = async function (enteredPassword) {
 
 // Generate JWT token
 adminSchema.methods.generateToken = function () {
-  return jwt.sign({ id: this._id }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES || "7d",
-  });
+  return jwt.sign(
+    { id: this._id, adminId: this.adminId },
+    process.env.JWT_SECRET,
+    {
+      expiresIn: process.env.JWT_EXPIRES || "7d",
+    }
+  );
 };
 
 export const Admin = mongoose.model("Admin", adminSchema);

@@ -1,10 +1,10 @@
 /**
  * DT Restro — Admin Account Setup Script
- * Run this script once to create or reset your admin credentials.
+ * Run this script to create or reset your admin credentials using .env or manual input.
  *
  * Usage:
  *   cd Backend
- *   node scripts/createAdmin.js
+ *   npm run create-admin
  */
 
 import dotenv from "dotenv";
@@ -19,57 +19,67 @@ import mongoose from "mongoose";
 import readline from "readline";
 import { Admin } from "../models/adminSchema.js";
 
-// ── Connect to DB ─────────────────────────────────────────────
 await mongoose.connect(process.env.MONGO_URL, { dbName: "dtrestro" });
-console.log("\n✅  Connected to MongoDB\n");
+console.log("\n✅ Connected to MongoDB\n");
 
-// ── Prompt helper ─────────────────────────────────────────────
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 const ask = (q) => new Promise((resolve) => rl.question(q, resolve));
 
-// ── Collect inputs ────────────────────────────────────────────
 console.log("══════════════════════════════════════");
-console.log("   DT Restro — Admin Account Setup   ");
+console.log("   DT Restro — Admin Account Setup    ");
 console.log("══════════════════════════════════════\n");
 
-const name     = await ask("Enter admin name     : ");
-const email    = await ask("Enter admin email    : ");
-const password = await ask("Enter admin password : ");
+const defaultId = process.env.ADMIN_ID || "admin";
+const defaultPass = process.env.ADMIN_PASSWORD || "Admin@12345";
 
-if (!name || !email || !password) {
-  console.error("\n❌  All fields are required. Exiting.\n");
+const useEnv = await ask(`Use credentials configured in .env (ID: "${defaultId}")? (yes/no) [yes]: `);
+
+let adminId = defaultId;
+let password = defaultPass;
+
+if (useEnv.trim().toLowerCase() === "no") {
+  adminId = (await ask(`Enter Admin ID [${defaultId}]: `)).trim() || defaultId;
+  password = (await ask(`Enter Admin Password: `)).trim();
+}
+
+if (!adminId || !password) {
+  console.error("\n❌ Admin ID and Password are required. Exiting.\n");
+  rl.close();
+  await mongoose.disconnect();
   process.exit(1);
 }
 
 if (password.length < 6) {
-  console.error("\n❌  Password must be at least 6 characters. Exiting.\n");
+  console.error("\n❌ Password must be at least 6 characters. Exiting.\n");
+  rl.close();
+  await mongoose.disconnect();
   process.exit(1);
 }
 
-// ── Check if admin already exists ─────────────────────────────
-const existing = await Admin.findOne({ email });
-if (existing) {
-  const overwrite = await ask(`\n⚠️  Admin with email "${email}" already exists. Overwrite? (yes/no): `);
-  if (overwrite.toLowerCase() !== "yes") {
-    console.log("\n❌  Cancelled. No changes made.\n");
-    rl.close();
-    await mongoose.disconnect();
-    process.exit(0);
+// Remove any existing admin accounts so only the single authorized owner exists
+const existingCount = await Admin.countDocuments();
+if (existingCount > 0) {
+  const confirm = await ask(`\n⚠️  ${existingCount} existing admin account(s) found. Reset to this authorized owner? (yes/no) [yes]: `);
+  if (confirm.trim().toLowerCase() !== "no") {
+    await Admin.deleteMany({});
+    console.log("🗑️  Previous admin records cleared.\n");
   }
-  await Admin.deleteOne({ email });
-  console.log("🗑️   Old admin account deleted.\n");
 }
 
-// ── Create new admin ──────────────────────────────────────────
-await Admin.create({ name, email, password });
+const admin = new Admin({
+  adminId,
+  name: "Authorized Admin",
+  email: adminId.includes("@") ? adminId : `${adminId}@dtrestro.com`,
+  password,
+});
+await admin.save();
 
 console.log("\n══════════════════════════════════════");
-console.log("✅  Admin account created successfully!");
+console.log("✅ Admin account configured successfully!");
 console.log("══════════════════════════════════════");
-console.log(`   Name  : ${name}`);
-console.log(`   Email : ${email}`);
-console.log(`   Pass  : ${"*".repeat(password.length)}`);
-console.log("\n🔑  Login at: http://localhost:5173/admin/login\n");
+console.log(`   Admin ID : ${adminId}`);
+console.log(`   Pass     : ${"*".repeat(password.length)}`);
+console.log("\n🔑 Login at: http://localhost:5173/admin/login\n");
 
 rl.close();
 await mongoose.disconnect();

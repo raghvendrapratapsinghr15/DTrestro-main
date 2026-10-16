@@ -42,7 +42,9 @@ const StatusBadge = ({ status }) => {
 // ── Main Component ────────────────────────────────────────────────────────────
 const AdminDashboard = () => {
   const navigate = useNavigate();
-  const adminName = localStorage.getItem("adminName") || "Admin";
+  const [adminName, setAdminName] = useState(
+    localStorage.getItem("adminId") || localStorage.getItem("adminName") || "Admin"
+  );
 
   const [stats, setStats] = useState(null);
   const [reservations, setReservations] = useState([]);
@@ -50,9 +52,34 @@ const AdminDashboard = () => {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
   const [filterDate, setFilterDate] = useState("");
-  const [activeView, setActiveView] = useState("dashboard");
+  const [activeView, setActiveView] = useState("dashboard"); // "dashboard" | "reservations" | "credentials"
   const [selectedRes, setSelectedRes] = useState(null);
   const [updating, setUpdating] = useState(null);
+
+  // ── Credentials Management State ───────────────────────────
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newAdminId, setNewAdminId] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [updatingCreds, setUpdatingCreds] = useState(false);
+
+  // ── Sync Admin Profile on Mount ────────────────────────────
+  useEffect(() => {
+    axios
+      .get(`${API}/me`, authHeaders())
+      .then(({ data }) => {
+        if (data.admin?.adminId) {
+          setAdminName(data.admin.adminId);
+          localStorage.setItem("adminId", data.admin.adminId);
+          localStorage.setItem("adminName", data.admin.adminId);
+        }
+      })
+      .catch((err) => {
+        if (err.response?.status === 401) {
+          handleLogout();
+        }
+      });
+  }, []);
 
   // ── Fetch Stats ────────────────────────────────────────────────────────────
   const fetchStats = useCallback(async () => {
@@ -95,8 +122,63 @@ const AdminDashboard = () => {
   const handleLogout = async () => {
     try { await axios.get(`${API}/logout`, authHeaders()); } catch (_) {}
     localStorage.removeItem("adminToken");
+    localStorage.removeItem("adminId");
     localStorage.removeItem("adminName");
     navigate("/admin/login");
+  };
+
+  // ── Change Credentials Handler ─────────────────────────────
+  const handleUpdateCredentials = async (e) => {
+    e.preventDefault();
+    if (!currentPassword) {
+      toast.error("Please enter your current password.");
+      return;
+    }
+    const trimmedNewId = newAdminId.trim();
+    if (!trimmedNewId && !newPassword) {
+      toast.error("Please provide a new Admin ID or new Password to update.");
+      return;
+    }
+    if (trimmedNewId && trimmedNewId.length < 3) {
+      toast.error("Admin ID must be at least 3 characters long.");
+      return;
+    }
+    if (newPassword) {
+      if (newPassword.length < 6) {
+        toast.error("New password must be at least 6 characters.");
+        return;
+      }
+      if (newPassword !== confirmPassword) {
+        toast.error("New passwords do not match.");
+        return;
+      }
+    }
+
+    setUpdatingCreds(true);
+    try {
+      const payload = { currentPassword };
+      if (trimmedNewId) payload.newAdminId = trimmedNewId;
+      if (newPassword) payload.newPassword = newPassword;
+
+      const { data } = await axios.put(`${API}/change-credentials`, payload, authHeaders());
+      toast.success(data.message || "Credentials updated successfully!");
+      if (data.token) {
+        localStorage.setItem("adminToken", data.token);
+      }
+      if (data.admin?.adminId) {
+        setAdminName(data.admin.adminId);
+        localStorage.setItem("adminId", data.admin.adminId);
+        localStorage.setItem("adminName", data.admin.adminId);
+      }
+      setCurrentPassword("");
+      setNewAdminId("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to update credentials.");
+    } finally {
+      setUpdatingCreds(false);
+    }
   };
 
   // ── Update Status ──────────────────────────────────────────────────────────
@@ -170,6 +252,12 @@ const AdminDashboard = () => {
           >
             <span>📋</span> Reservations
           </button>
+          <button
+            className={`adm-nav-item${activeView === "credentials" ? " active" : ""}`}
+            onClick={() => setActiveView("credentials")}
+          >
+            <span>🔐</span> Change ID / Password
+          </button>
         </nav>
 
         <div className="adm-sidebar-footer">
@@ -192,7 +280,11 @@ const AdminDashboard = () => {
         <header className="adm-topbar">
           <div>
             <h1 className="adm-topbar-title">
-              {activeView === "dashboard" ? "Dashboard Overview" : "All Reservations"}
+              {activeView === "dashboard"
+                ? "Dashboard Overview"
+                : activeView === "reservations"
+                ? "All Reservations"
+                : "Security & Credentials"}
             </h1>
             <p className="adm-topbar-sub">
               {new Date().toLocaleDateString("en-IN", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
@@ -285,6 +377,92 @@ const AdminDashboard = () => {
                   updating={updating}
                 />
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ══════════════════ CREDENTIALS VIEW ══════════════════ */}
+        {activeView === "credentials" && (
+          <div className="adm-credentials-view">
+            <div className="adm-card adm-cred-card">
+              <div className="adm-card-header">
+                <div>
+                  <h2>Change Admin ID & Password</h2>
+                  <p className="adm-card-sub">
+                    Update your login credentials. You must enter your current password to authorize any changes.
+                  </p>
+                </div>
+              </div>
+
+              <div className="adm-current-id-badge">
+                <span>Active Admin ID:</span> <strong>{adminName}</strong>
+              </div>
+
+              <form className="adm-cred-form" onSubmit={handleUpdateCredentials}>
+                <div className="adm-form-group">
+                  <label htmlFor="cred-current-pass">Current Password *</label>
+                  <input
+                    id="cred-current-pass"
+                    type="password"
+                    placeholder="Enter current password to verify"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    required
+                    autoComplete="current-password"
+                  />
+                </div>
+
+                <div className="adm-form-divider">
+                  <span>New Credentials (fill at least one)</span>
+                </div>
+
+                <div className="adm-form-group">
+                  <label htmlFor="cred-new-id">New Admin ID (Optional)</label>
+                  <input
+                    id="cred-new-id"
+                    type="text"
+                    placeholder="Enter new Admin ID (leave empty to keep unchanged)"
+                    value={newAdminId}
+                    onChange={(e) => setNewAdminId(e.target.value)}
+                    autoComplete="username"
+                  />
+                </div>
+
+                <div className="adm-form-row">
+                  <div className="adm-form-group">
+                    <label htmlFor="cred-new-pass">New Password (Optional)</label>
+                    <input
+                      id="cred-new-pass"
+                      type="password"
+                      placeholder="At least 6 characters"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      autoComplete="new-password"
+                    />
+                  </div>
+
+                  <div className="adm-form-group">
+                    <label htmlFor="cred-confirm-pass">Confirm New Password</label>
+                    <input
+                      id="cred-confirm-pass"
+                      type="password"
+                      placeholder="Re-enter new password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      autoComplete="new-password"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  className="adm-cred-btn"
+                  id="adm-cred-submit-btn"
+                  disabled={updatingCreds}
+                >
+                  {updatingCreds ? "Updating Credentials..." : "🔒 Update Credentials"}
+                </button>
+              </form>
             </div>
           </div>
         )}
