@@ -9,6 +9,7 @@ import dbConnection from "./database/dbConnection.js";
 import { errorMiddleware } from "./error/error.js";
 import reservationRouter from "./routes/reservationRoute.js";
 import adminRouter from "./routes/adminRoute.js";
+import feedbackRouter from "./routes/feedbackRoute.js";
 
 const app = express();
 
@@ -32,6 +33,7 @@ dbConnection();
 // routes
 app.use("/api/v1/reservation", reservationRouter);
 app.use("/api/v1/admin",       adminRouter);
+app.use("/api/v1/feedback",    feedbackRouter);
 
 // error middleware LAST
 app.use(errorMiddleware);

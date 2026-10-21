@@ -5,6 +5,7 @@ import toast from "react-hot-toast";
 import { BACKEND_URL } from "../config";
 
 const API = `${BACKEND_URL}/api/v1/admin`;
+const API_FEEDBACK = `${BACKEND_URL}/api/v1/feedback`;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const authHeaders = () => ({
@@ -52,9 +53,22 @@ const AdminDashboard = () => {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
   const [filterDate, setFilterDate] = useState("");
-  const [activeView, setActiveView] = useState("dashboard"); // "dashboard" | "reservations" | "credentials"
+  const [activeView, setActiveView] = useState("dashboard"); // "dashboard" | "reservations" | "feedbacks" | "credentials"
   const [selectedRes, setSelectedRes] = useState(null);
   const [updating, setUpdating] = useState(null);
+
+  // ── Feedback Management State ──────────────────────────────
+  const [feedbackStats, setFeedbackStats] = useState(null);
+  const [feedbacks, setFeedbacks] = useState([]);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [feedbackSearch, setFeedbackSearch] = useState("");
+  const [feedbackSearchInput, setFeedbackSearchInput] = useState("");
+  const [feedbackRatingFilter, setFeedbackRatingFilter] = useState("All");
+  const [feedbackPage, setFeedbackPage] = useState(1);
+  const [feedbackTotalPages, setFeedbackTotalPages] = useState(1);
+  const [feedbackTotalCount, setFeedbackTotalCount] = useState(0);
+  const [selectedFeedback, setSelectedFeedback] = useState(null);
+  const [deletingFeedbackId, setDeletingFeedbackId] = useState(null);
 
   // ── Credentials Management State ───────────────────────────
   const [currentPassword, setCurrentPassword] = useState("");
@@ -81,11 +95,23 @@ const AdminDashboard = () => {
       });
   }, []);
 
-  // ── Fetch Stats ────────────────────────────────────────────────────────────
+  // ── Fetch Reservation Stats ────────────────────────────────────────────────
   const fetchStats = useCallback(async () => {
     try {
       const { data } = await axios.get(`${API}/stats`, authHeaders());
       setStats(data.stats);
+    } catch (err) {
+      if (err.response?.status === 401) handleLogout();
+    }
+  }, []);
+
+  // ── Fetch Feedback Stats ───────────────────────────────────────────────────
+  const fetchFeedbackStats = useCallback(async () => {
+    try {
+      const { data } = await axios.get(`${API_FEEDBACK}/stats`, authHeaders());
+      if (data.success) {
+        setFeedbackStats(data.stats);
+      }
     } catch (err) {
       if (err.response?.status === 401) handleLogout();
     }
@@ -113,10 +139,45 @@ const AdminDashboard = () => {
     }
   }, [filterStatus, filterDate, search]);
 
+  // ── Fetch Feedbacks ────────────────────────────────────────────────────────
+  const fetchFeedbacks = useCallback(async () => {
+    setFeedbackLoading(true);
+    try {
+      const params = {
+        page: feedbackPage,
+        limit: 8,
+      };
+      if (feedbackRatingFilter !== "All") params.rating = feedbackRatingFilter;
+      if (feedbackSearch) params.search = feedbackSearch;
+
+      const { data } = await axios.get(`${API_FEEDBACK}/all`, {
+        ...authHeaders(),
+        params,
+      });
+      if (data.success) {
+        setFeedbacks(data.feedbacks || []);
+        setFeedbackTotalPages(data.totalPages || 1);
+        setFeedbackTotalCount(data.total || 0);
+      }
+    } catch (err) {
+      if (err.response?.status === 401) handleLogout();
+      else toast.error("Failed to load feedback records.");
+    } finally {
+      setFeedbackLoading(false);
+    }
+  }, [feedbackRatingFilter, feedbackSearch, feedbackPage]);
+
   useEffect(() => {
     fetchStats();
     fetchReservations();
-  }, [fetchStats, fetchReservations]);
+    fetchFeedbackStats();
+  }, [fetchStats, fetchReservations, fetchFeedbackStats]);
+
+  useEffect(() => {
+    if (activeView === "feedbacks" || activeView === "dashboard") {
+      fetchFeedbacks();
+    }
+  }, [activeView, fetchFeedbacks]);
 
   // ── Logout ─────────────────────────────────────────────────────────────────
   const handleLogout = async () => {
@@ -125,6 +186,23 @@ const AdminDashboard = () => {
     localStorage.removeItem("adminId");
     localStorage.removeItem("adminName");
     navigate("/admin/login");
+  };
+
+  // ── Delete Feedback Handler ────────────────────────────────
+  const handleDeleteFeedback = async (id) => {
+    if (!window.confirm("Permanently delete this feedback from the database?")) return;
+    setDeletingFeedbackId(id);
+    try {
+      await axios.delete(`${API_FEEDBACK}/${id}`, authHeaders());
+      toast.success("Feedback deleted successfully.");
+      if (selectedFeedback?._id === id) setSelectedFeedback(null);
+      fetchFeedbacks();
+      fetchFeedbackStats();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to delete feedback.");
+    } finally {
+      setDeletingFeedbackId(null);
+    }
   };
 
   // ── Change Credentials Handler ─────────────────────────────
@@ -181,7 +259,7 @@ const AdminDashboard = () => {
     }
   };
 
-  // ── Update Status ──────────────────────────────────────────────────────────
+  // ── Update Reservation Status ──────────────────────────────
   const updateStatus = async (id, status) => {
     setUpdating(id);
     try {
@@ -201,7 +279,7 @@ const AdminDashboard = () => {
     }
   };
 
-  // ── Delete ─────────────────────────────────────────────────────────────────
+  // ── Delete Reservation ─────────────────────────────────────
   const deleteReservation = async (id) => {
     if (!window.confirm("Delete this reservation permanently?")) return;
     try {
@@ -215,18 +293,33 @@ const AdminDashboard = () => {
     }
   };
 
-  // ── Search debounce ────────────────────────────────────────────────────────
+  // ── Search debounces ───────────────────────────────────────
   const [searchInput, setSearchInput] = useState("");
   useEffect(() => {
     const t = setTimeout(() => setSearch(searchInput), 400);
     return () => clearTimeout(t);
   }, [searchInput]);
 
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setFeedbackSearch(feedbackSearchInput);
+      setFeedbackPage(1);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [feedbackSearchInput]);
+
   const clearFilters = () => {
     setSearchInput("");
     setSearch("");
     setFilterStatus("All");
     setFilterDate("");
+  };
+
+  const clearFeedbackFilters = () => {
+    setFeedbackSearchInput("");
+    setFeedbackSearch("");
+    setFeedbackRatingFilter("All");
+    setFeedbackPage(1);
   };
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -251,6 +344,12 @@ const AdminDashboard = () => {
             onClick={() => setActiveView("reservations")}
           >
             <span>📋</span> Reservations
+          </button>
+          <button
+            className={`adm-nav-item${activeView === "feedbacks" ? " active" : ""}`}
+            onClick={() => setActiveView("feedbacks")}
+          >
+            <span>⭐</span> Feedbacks ({feedbackStats?.totalFeedback ?? 0})
           </button>
           <button
             className={`adm-nav-item${activeView === "credentials" ? " active" : ""}`}
@@ -284,13 +383,28 @@ const AdminDashboard = () => {
                 ? "Dashboard Overview"
                 : activeView === "reservations"
                 ? "All Reservations"
+                : activeView === "feedbacks"
+                ? "Guest Feedbacks & Ratings"
                 : "Security & Credentials"}
             </h1>
             <p className="adm-topbar-sub">
-              {new Date().toLocaleDateString("en-IN", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+              {new Date().toLocaleDateString("en-IN", {
+                weekday: "long",
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+              })}
             </p>
           </div>
-          <button className="adm-refresh-btn" onClick={() => { fetchStats(); fetchReservations(); }}>
+          <button
+            className="adm-refresh-btn"
+            onClick={() => {
+              fetchStats();
+              fetchReservations();
+              fetchFeedbackStats();
+              if (activeView === "feedbacks") fetchFeedbacks();
+            }}
+          >
             ↺ Refresh
           </button>
         </header>
@@ -300,12 +414,28 @@ const AdminDashboard = () => {
           <div className="adm-dashboard-view">
             {/* Stat cards */}
             <div className="adm-stats-grid">
-              <StatCard icon="📅" label="Total Bookings"    value={stats?.total}     accent="#d4a843" />
-              <StatCard icon="🌅" label="Today's Bookings"  value={stats?.todayCount} accent="#6366f1" />
-              <StatCard icon="⏳" label="Upcoming"          value={stats?.upcoming}   accent="#10b981" />
-              <StatCard icon="🔔" label="Pending"           value={stats?.pending}    accent="#f59e0b" />
-              <StatCard icon="✅" label="Confirmed"         value={stats?.confirmed}  accent="#22c55e" />
-              <StatCard icon="❌" label="Cancelled"         value={stats?.cancelled}  accent="#ef4444" />
+              <StatCard icon="📅" label="Total Bookings"   value={stats?.total} accent="#d4a843" />
+              <StatCard icon="🌅" label="Today's Bookings" value={stats?.todayCount} accent="#6366f1" />
+              <StatCard icon="⏳" label="Upcoming"         value={stats?.upcoming} accent="#10b981" />
+              <StatCard icon="🔔" label="Pending"          value={stats?.pending} accent="#f59e0b" />
+              <StatCard
+                icon="⭐"
+                label="Feedbacks"
+                value={feedbackStats?.totalFeedback ?? stats?.totalFeedback ?? "0"}
+                accent="#ec4899"
+              />
+              <StatCard
+                icon="🏆"
+                label="Avg Rating"
+                value={
+                  feedbackStats?.averageRating
+                    ? `${feedbackStats.averageRating} ★`
+                    : stats?.avgRating
+                    ? `${stats.avgRating} ★`
+                    : "—"
+                }
+                accent="#eab308"
+              />
             </div>
 
             {/* Recent reservations preview */}
@@ -324,6 +454,25 @@ const AdminDashboard = () => {
                   onStatusChange={updateStatus}
                   onDelete={deleteReservation}
                   updating={updating}
+                />
+              </div>
+            </div>
+
+            {/* Recent Feedbacks Preview */}
+            <div className="adm-card adm-recent-card" style={{ marginTop: "24px" }}>
+              <div className="adm-card-header">
+                <h2>Recent Guest Feedbacks</h2>
+                <button className="adm-text-btn" onClick={() => setActiveView("feedbacks")}>
+                  View all ({feedbackStats?.totalFeedback ?? 0}) →
+                </button>
+              </div>
+              <div className="adm-table-wrap">
+                <FeedbackTable
+                  feedbacks={feedbacks.slice(0, 5)}
+                  loading={feedbackLoading}
+                  onSelect={setSelectedFeedback}
+                  onDelete={handleDeleteFeedback}
+                  deletingId={deletingFeedbackId}
                 />
               </div>
             </div>
@@ -377,6 +526,147 @@ const AdminDashboard = () => {
                   updating={updating}
                 />
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ══════════════════ FEEDBACKS VIEW ══════════════════ */}
+        {activeView === "feedbacks" && (
+          <div className="adm-reservations-view">
+            {/* Feedback KPI Summary Cards */}
+            <div className="adm-feedback-summary-grid">
+              <div className="adm-feedback-overview-card" style={{ "--card-accent": "#d4a843" }}>
+                <div className="adm-feedback-icon-box">💬</div>
+                <div>
+                  <div className="adm-feedback-kpi-val">{feedbackStats?.totalFeedback ?? 0}</div>
+                  <div className="adm-feedback-kpi-sub">Total Submissions</div>
+                </div>
+              </div>
+
+              <div className="adm-feedback-overview-card" style={{ "--card-accent": "#fbbf24" }}>
+                <div className="adm-feedback-icon-box">★</div>
+                <div>
+                  <div className="adm-feedback-kpi-val">
+                    {feedbackStats?.averageRating ? `${feedbackStats.averageRating} / 5` : "0.0 / 5"}
+                  </div>
+                  <div className="adm-feedback-kpi-sub">Overall Average Rating</div>
+                </div>
+              </div>
+
+              <div className="adm-feedback-overview-card" style={{ "--card-accent": "#10b981" }}>
+                <div className="adm-feedback-icon-box">🏆</div>
+                <div>
+                  <div className="adm-feedback-kpi-val">
+                    {feedbackStats?.breakdown?.fiveStar ?? 0}
+                  </div>
+                  <div className="adm-feedback-kpi-sub">5-Star Perfect Ratings</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Star Distribution Breakdown */}
+            {feedbackStats && feedbackStats.totalFeedback > 0 && (
+              <div className="adm-rating-breakdown-card">
+                <div className="adm-breakdown-header">
+                  <h3>Rating Distribution</h3>
+                  <div className="adm-breakdown-avg">
+                    <span>{feedbackStats.averageRating}</span>
+                    <span>★</span>
+                  </div>
+                </div>
+                <div className="adm-breakdown-bars">
+                  {[5, 4, 3, 2, 1].map((stars) => {
+                    const keyMap = { 5: "fiveStar", 4: "fourStar", 3: "threeStar", 2: "twoStar", 1: "oneStar" };
+                    const count = feedbackStats.breakdown?.[keyMap[stars]] || 0;
+                    const percent = feedbackStats.totalFeedback > 0 ? (count / feedbackStats.totalFeedback) * 100 : 0;
+                    return (
+                      <div className="adm-bar-row" key={stars}>
+                        <div className="adm-bar-label">{stars} Stars ★</div>
+                        <div className="adm-bar-track">
+                          <div className="adm-bar-fill" style={{ width: `${percent}%` }} />
+                        </div>
+                        <div className="adm-bar-count">{count} ({percent.toFixed(0)}%)</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Feedback Filter Bar */}
+            <div className="adm-filters-bar">
+              <input
+                className="adm-search"
+                type="text"
+                placeholder="🔍  Search by UID, user name, or feedback text…"
+                value={feedbackSearchInput}
+                onChange={(e) => setFeedbackSearchInput(e.target.value)}
+              />
+              <select
+                className="adm-select"
+                value={feedbackRatingFilter}
+                onChange={(e) => {
+                  setFeedbackRatingFilter(e.target.value);
+                  setFeedbackPage(1);
+                }}
+              >
+                <option value="All">All Ratings</option>
+                <option value="5">5 Stars ★★★★★</option>
+                <option value="4">4 Stars ★★★★</option>
+                <option value="3">3 Stars ★★★</option>
+                <option value="2">2 Stars ★★</option>
+                <option value="1">1 Star ★</option>
+              </select>
+              <button className="adm-clear-btn" onClick={clearFeedbackFilters}>
+                ✕ Clear
+              </button>
+            </div>
+
+            {/* Feedback Records Card */}
+            <div className="adm-card">
+              <div className="adm-card-header">
+                <h2>
+                  Feedback Records{" "}
+                  <span className="adm-count-badge">{feedbackTotalCount}</span>
+                </h2>
+              </div>
+              <div className="adm-table-wrap">
+                <FeedbackTable
+                  feedbacks={feedbacks}
+                  loading={feedbackLoading}
+                  onSelect={setSelectedFeedback}
+                  onDelete={handleDeleteFeedback}
+                  deletingId={deletingFeedbackId}
+                />
+              </div>
+
+              {/* Pagination Bar */}
+              {feedbackTotalPages > 1 && (
+                <div className="adm-pagination-bar">
+                  <span>
+                    Showing page {feedbackPage} of {feedbackTotalPages} ({feedbackTotalCount} total reviews)
+                  </span>
+                  <div className="adm-page-buttons">
+                    <button
+                      className="adm-page-btn"
+                      disabled={feedbackPage <= 1 || feedbackLoading}
+                      onClick={() => setFeedbackPage((p) => Math.max(1, p - 1))}
+                    >
+                      ← Previous
+                    </button>
+                    <span className="adm-page-info">
+                      {feedbackPage} / {feedbackTotalPages}
+                    </span>
+                    <button
+                      className="adm-page-btn"
+                      disabled={feedbackPage >= feedbackTotalPages || feedbackLoading}
+                      onClick={() => setFeedbackPage((p) => Math.min(feedbackTotalPages, p + 1))}
+                    >
+                      Next →
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -468,7 +758,7 @@ const AdminDashboard = () => {
         )}
       </main>
 
-      {/* ── Detail Modal ──────────────────────────────── */}
+      {/* ── Reservation Detail Modal ── */}
       {selectedRes && (
         <ReservationModal
           res={selectedRes}
@@ -476,6 +766,15 @@ const AdminDashboard = () => {
           onStatusChange={updateStatus}
           onDelete={deleteReservation}
           updating={updating}
+        />
+      )}
+
+      {/* ── Feedback Detail Modal ── */}
+      {selectedFeedback && (
+        <FeedbackModal
+          fb={selectedFeedback}
+          onClose={() => setSelectedFeedback(null)}
+          onDelete={handleDeleteFeedback}
         />
       )}
     </div>
@@ -545,7 +844,95 @@ const ReservationsTable = ({ reservations, loading, onSelect, onStatusChange, on
   );
 };
 
-// ── Detail Modal ──────────────────────────────────────────────────────────────
+// ── Feedback Table Component ──────────────────────────────────────────────────
+const FeedbackTable = ({ feedbacks, loading, onSelect, onDelete, deletingId }) => {
+  if (loading) return <div className="adm-loading"><span className="adm-spinner-lg" /></div>;
+  if (!feedbacks.length) return <div className="adm-empty">No feedback records found.</div>;
+
+  return (
+    <table className="adm-table">
+      <thead>
+        <tr>
+          <th>UID</th>
+          <th>User</th>
+          <th>Rating</th>
+          <th>Experience Feedback</th>
+          <th>Improvement Suggestions</th>
+          <th>Submitted On</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {feedbacks.map((fb) => (
+          <tr key={fb._id} onClick={() => onSelect(fb)} className="adm-table-row">
+            <td>
+              <span className="adm-uid-badge">{fb.feedbackId || "FB-—"}</span>
+            </td>
+            <td>
+              <div className="adm-customer-cell">
+                <img
+                  src={fb.userImage || "/review_1.png"}
+                  alt={fb.userName}
+                  className="adm-customer-avatar"
+                  style={{ objectFit: "cover" }}
+                  onError={(e) => {
+                    e.target.src = "/review_1.png";
+                  }}
+                />
+                <div>
+                  <p className="adm-customer-name">{fb.userName || "Guest Diner"}</p>
+                </div>
+              </div>
+            </td>
+            <td>
+              <div className="adm-stars-cell">
+                {"★".repeat(fb.rating)}
+                <span style={{ color: "#71717a", fontSize: "0.8rem", marginLeft: "4px" }}>
+                  ({fb.rating}/5)
+                </span>
+              </div>
+            </td>
+            <td>
+              <p className="adm-text-clamp">{fb.userExperience}</p>
+            </td>
+            <td>
+              <p className="adm-text-muted-clamp">
+                {fb.improvementSuggestions ? fb.improvementSuggestions : "— None —"}
+              </p>
+            </td>
+            <td style={{ fontSize: "0.82rem", color: "var(--brand-muted)", whiteSpace: "nowrap" }}>
+              {fb.createdAt
+                ? new Date(fb.createdAt).toLocaleDateString("en-IN", {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
+                : "—"}
+            </td>
+            <td onClick={(e) => e.stopPropagation()}>
+              <div className="adm-action-btns">
+                <button className="adm-btn-view" onClick={() => onSelect(fb)}>
+                  View
+                </button>
+                <button
+                  className="adm-btn-delete"
+                  disabled={deletingId === fb._id}
+                  onClick={() => onDelete(fb._id)}
+                >
+                  {deletingId === fb._id ? "..." : "Delete"}
+                </button>
+              </div>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+};
+
+// ── Reservation Detail Modal ──────────────────────────────────────────────────
 const ReservationModal = ({ res, onClose, onStatusChange, onDelete, updating }) => (
   <div className="adm-modal-overlay" onClick={onClose}>
     <div className="adm-modal" onClick={(e) => e.stopPropagation()}>
@@ -598,6 +985,110 @@ const ReservationModal = ({ res, onClose, onStatusChange, onDelete, updating }) 
         </div>
         <button className="adm-btn-delete" onClick={() => { onDelete(res._id); onClose(); }}>
           🗑 Delete
+        </button>
+      </div>
+    </div>
+  </div>
+);
+
+// ── Feedback Detail Modal ─────────────────────────────────────────────────────
+const FeedbackModal = ({ fb, onClose, onDelete }) => (
+  <div className="adm-modal-overlay" onClick={onClose}>
+    <div className="adm-modal adm-modal-feedback-card" onClick={(e) => e.stopPropagation()}>
+      <div className="adm-modal-header">
+        <div>
+          <h2>Feedback Details</h2>
+          <span className="adm-uid-badge" style={{ marginTop: "4px" }}>
+            UID: {fb.feedbackId}
+          </span>
+        </div>
+        <button className="adm-modal-close" onClick={onClose}>✕</button>
+      </div>
+
+      <div className="adm-modal-body">
+        <div style={{ display: "flex", alignItems: "center", gap: "14px", marginBottom: "18px" }}>
+          <img
+            src={fb.userImage || "/review_1.png"}
+            alt={fb.userName}
+            style={{ width: "54px", height: "54px", borderRadius: "50%", objectFit: "cover", border: "2px solid var(--brand-gold)" }}
+            onError={(e) => { e.target.src = "/review_1.png"; }}
+          />
+          <div>
+            <h3 className="adm-modal-name" style={{ margin: 0, textAlign: "left" }}>
+              {fb.userName || "Guest Diner"}
+            </h3>
+            <div className="adm-stars-cell" style={{ fontSize: "1.2rem", marginTop: "4px" }}>
+              {"★".repeat(fb.rating)}
+              <span style={{ color: "#d4a843", fontSize: "0.85rem", marginLeft: "6px", fontWeight: "bold" }}>
+                ({fb.rating} of 5 Stars)
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ textAlign: "left", marginBottom: "14px" }}>
+          <span style={{ fontSize: "0.8rem", color: "var(--brand-gold)", fontWeight: "600", textTransform: "uppercase", letterSpacing: "1px" }}>
+            Experience Feedback:
+          </span>
+          <div className="adm-feedback-quote-block">
+            "{fb.userExperience}"
+          </div>
+        </div>
+
+        {fb.improvementSuggestions && (
+          <div style={{ textAlign: "left", marginBottom: "14px" }}>
+            <span style={{ fontSize: "0.8rem", color: "#38bdf8", fontWeight: "600", textTransform: "uppercase", letterSpacing: "1px" }}>
+              Improvement Suggestions:
+            </span>
+            <div className="adm-feedback-suggestion-block">
+              {fb.improvementSuggestions}
+            </div>
+          </div>
+        )}
+
+        <div className="adm-modal-grid" style={{ marginTop: "16px" }}>
+          <div className="adm-modal-item">
+            <span>🗓 Submitted Date</span>
+            <p>
+              {fb.createdAt
+                ? new Date(fb.createdAt).toLocaleDateString("en-IN", {
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  })
+                : "—"}
+            </p>
+          </div>
+          <div className="adm-modal-item">
+            <span>🕐 Time</span>
+            <p>
+              {fb.createdAt
+                ? new Date(fb.createdAt).toLocaleTimeString("en-IN", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
+                : "—"}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="adm-modal-footer">
+        <button
+          className="adm-btn-delete"
+          onClick={() => {
+            onDelete(fb._id);
+            onClose();
+          }}
+        >
+          🗑 Delete Feedback
+        </button>
+        <button
+          className="adm-page-btn"
+          onClick={onClose}
+          style={{ background: "#3f3f46" }}
+        >
+          Close
         </button>
       </div>
     </div>

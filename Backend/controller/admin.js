@@ -2,6 +2,7 @@ import Errorhandler from "../error/error.js";
 import jwt from "jsonwebtoken";
 import { Admin } from "../models/adminSchema.js";
 import { Reservation } from "../models/reservationSchema.js";
+import { Feedback } from "../models/feedbackSchema.js";
 
 // Helper to send error response directly (Express 5 safe)
 const sendError = (res, message, statusCode = 500) => {
@@ -201,7 +202,7 @@ export const getDashboardStats = async (req, res) => {
   try {
     const today = new Date().toISOString().split("T")[0];
 
-    const [total, todayCount, pending, confirmed, cancelled, upcoming] =
+    const [total, todayCount, pending, confirmed, cancelled, upcoming, totalFeedback, feedbackAgg] =
       await Promise.all([
         Reservation.countDocuments(),
         Reservation.countDocuments({ date: today }),
@@ -209,11 +210,27 @@ export const getDashboardStats = async (req, res) => {
         Reservation.countDocuments({ status: "Confirmed" }),
         Reservation.countDocuments({ status: "Cancelled" }),
         Reservation.countDocuments({ date: { $gte: today }, status: { $ne: "Cancelled" } }),
+        Feedback.countDocuments(),
+        Feedback.aggregate([{ $group: { _id: null, avg: { $avg: "$rating" } } }]),
       ]);
+
+    const avgRating =
+      feedbackAgg && feedbackAgg.length > 0 && feedbackAgg[0].avg
+        ? Number(feedbackAgg[0].avg.toFixed(1))
+        : 0;
 
     res.status(200).json({
       success: true,
-      stats: { total, todayCount, upcoming, pending, confirmed, cancelled },
+      stats: {
+        total,
+        todayCount,
+        upcoming,
+        pending,
+        confirmed,
+        cancelled,
+        totalFeedback,
+        avgRating,
+      },
     });
   } catch (error) {
     return sendError(res, error.message || "Failed to fetch stats.");

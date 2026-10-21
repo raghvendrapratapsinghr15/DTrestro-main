@@ -10,6 +10,7 @@ import Home from './pages/Home';
 import Success from './pages/Success';
 import NotFound from './pages/NotFound';
 import MenuPage from "./pages/MenuPage";
+import FeedbackPage from "./pages/FeedbackPage";
 import AdminLogin from "./pages/AdminLogin";
 import AdminDashboard from "./pages/AdminDashboard";
 
@@ -18,10 +19,11 @@ const App = () => {
     <Router>
       <Routes>
         {/* ── Customer Routes ── */}
-        <Route path="/"       element={<Home />} />
+        <Route path="/"        element={<Home />} />
         <Route path="/success" element={<Success />} />
-        <Route path="/menu"   element={<MenuPage />} />
-        <Route path="*"       element={<NotFound />} />
+        <Route path="/menu"    element={<MenuPage />} />
+        <Route path="/feedback" element={<FeedbackPage />} />
+        <Route path="*"        element={<NotFound />} />
 
         {/* ── Admin Routes ── */}
         <Route path="/admin/login" element={<AdminLogin />} />

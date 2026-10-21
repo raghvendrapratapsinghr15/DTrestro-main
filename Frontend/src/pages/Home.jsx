@@ -6,6 +6,7 @@ import Menu from "../components/Menu";
 import WhoAreWe from "../components/WhoAreWe";
 import Team from "../components/Team";
 import Reservation from "../components/Reservation";
+import ShareExperienceCTA from "../components/ShareExperienceCTA";
 import Footer from "../components/Footer";
 
 const Home = () => {
@@ -20,6 +21,7 @@ const Home = () => {
       <WhoAreWe/>
       <Team/>
       <Reservation/>
+      <ShareExperienceCTA/>
       <Footer/>
     </>
   )

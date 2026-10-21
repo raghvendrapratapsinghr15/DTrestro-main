@@ -17,19 +17,28 @@ const Navbar = () => {
           </RouterLink>
         </div>
         <div className={show ? "navLinks showmenu" : "navLinks"}>
-          <div className="links">
-            {data[0].navbarLinks.map((element) => (
-              <Link
-                to={element.link}
-                spy={true}
-                smooth={true}
-                duration={500}
-                key={element.id}
-              >
-                {element.title}
-              </Link>
-            ))}
-          </div>
+            {data[0].navbarLinks.map((element) =>
+              element.link === "feedback" ? (
+                <RouterLink
+                  to="/feedback"
+                  key={element.id}
+                  onClick={() => setShow(false)}
+                >
+                  {element.title}
+                </RouterLink>
+              ) : (
+                <Link
+                  to={element.link}
+                  spy={true}
+                  smooth={true}
+                  duration={500}
+                  key={element.id}
+                  onClick={() => setShow(false)}
+                >
+                  {element.title}
+                </Link>
+              )
+            )}
              <button className="menuBtn" onClick={() => navigate("/menu")}>
                   OUR MENU
             </button>
